@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#07111f">
+  <meta name="description" content="NUVORA Cloud Readiness — diagnóstico de infraestrutura e prontidão para migração à nuvem.">
+  <title>NUVORA | Cloud Readiness Advisor</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: '#07111f',
+            panel: '#0d1b2d',
+            cyanx: '#55e6f2',
+            violetx: '#9a8cff',
+            mutedx: '#91a5bd'
+          },
+          boxShadow: {
+            glow: '0 0 35px rgba(85,230,242,.13)',
+            card: '0 18px 60px rgba(0,0,0,.25)'
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Manrope', sans-serif; background: #07111f; color: #edf5ff; }
+    .mono { font-family: 'DM Mono', monospace; }
+    .grid-bg {
+      background-image: linear-gradient(rgba(114,157,190,.045) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(114,157,190,.045) 1px, transparent 1px);
+      background-size: 38px 38px;
+      mask-image: linear-gradient(to bottom, black, transparent 90%);
+    }
+    .glass { background: linear-gradient(145deg, rgba(17,37,58,.94), rgba(10,24,40,.94)); border: 1px solid rgba(130,174,205,.16); }
+    .gradient-text { background: linear-gradient(90deg,#e8fbff 0%,#55e6f2 48%,#a99cff 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }
+    .field { width:100%; border:1px solid #29425b; border-radius:12px; background:#081625; color:#edf5ff; padding:12px 14px; outline:none; transition:.2s; }
+    .field:focus { border-color:#55e6f2; box-shadow:0 0 0 3px rgba(85,230,242,.1); }
+    .field option { background:#0d1b2d; }
+    .question-option { display:flex; align-items:flex-start; gap:11px; padding:13px; border:1px solid #263e56; background:rgba(6,18,31,.58); border-radius:12px; cursor:pointer; transition:.18s; }
+    .question-option:hover { border-color:#55e6f2; background:rgba(30,67,86,.25); }
+    .question-option:has(input:checked) { border-color:#55e6f2; background:rgba(85,230,242,.09); box-shadow:inset 0 0 0 1px rgba(85,230,242,.18); }
+    .question-option input { accent-color:#55e6f2; margin-top:4px; flex-shrink:0; }
+    .btn-primary { background:linear-gradient(100deg,#55e6f2,#8c9bff); color:#06121e; font-weight:800; }
+    .btn-primary:hover { filter:brightness(1.08); transform:translateY(-1px); }
+    .btn-secondary { border:1px solid #36536c; background:rgba(16,37,57,.8); color:#d9eaff; }
+    .btn-secondary:hover { border-color:#55e6f2; color:#55e6f2; }
+    .metric-card { background:linear-gradient(150deg,rgba(19,42,64,.95),rgba(9,24,40,.96)); border:1px solid rgba(121,164,196,.17); }
+    .progress-track { height:7px; background:#20364b; border-radius:20px; overflow:hidden; }
+    .progress-fill { height:100%; border-radius:20px; background:linear-gradient(90deg,#55e6f2,#9a8cff); transition:width .5s ease; }
+    .pillar-icon { background:rgba(85,230,242,.1); color:#55e6f2; border:1px solid rgba(85,230,242,.18); }
+    .recommendation { border-left:2px solid #55e6f2; background:rgba(8,24,39,.75); }
+    .eyebrow { letter-spacing:.18em; text-transform:uppercase; font-size:10px; font-weight:800; color:#6f91ad; }
+    .section-anchor { scroll-margin-top:25px; }
+    @media print {
+      @page { size:A4; margin:14mm; }
+      :root { color-scheme:light; }
+      body { background:#fff !important; color:#172536 !important; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+      .no-print, #assessment, #hero-actions, footer .footer-actions { display:none !important; }
+      #results { display:block !important; }
+      .glass,.metric-card,.recommendation { background:#f5f9fc !important; color:#172536 !important; border:1px solid #d7e2eb !important; box-shadow:none !important; break-inside:avoid; }
+      .text-white,.text-slate-100,.text-slate-200,.text-slate-300,.text-slate-400 { color:#24384c !important; }
+      .gradient-text { color:#087e91 !important; background:none !important; }
+      .progress-track { background:#dce7ef !important; }
+      .progress-fill { background:#087e91 !important; }
+      canvas { max-height:270px !important; }
+      header { border-bottom:1px solid #d7e2eb; }
+      footer { color:#526579 !important; }
+      .print-only { display:block !important; }
+    }
+    .print-only { display:none; }
+  </style>
+</head>
+
+<body class="min-h-screen overflow-x-hidden">
+  <div class="fixed inset-0 grid-bg pointer-events-none"></div>
+  <div class="fixed -top-48 -right-40 w-[560px] h-[560px] rounded-full pointer-events-none"
+       style="background:radial-gradient(circle,rgba(67,183,211,.12),transparent 68%)"></div>
+  <div class="fixed top-[45%] -left-64 w-[500px] h-[500px] rounded-full pointer-events-none"
+       style="background:radial-gradient(circle,rgba(128,105,255,.09),transparent 68%)"></div>
+
+  <header class="relative z-10 max-w-7xl mx-auto px-5 sm:px-8 pt-7 pb-6 flex items-center justify-between gap-4">
+    <a href="#" class="flex items-center gap-3 no-underline" aria-label="NUVORA início">
+      <!-- Logotipo vetorial original NUVORA -->
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none" role="img" aria-label="Símbolo NUVORA">
+        <defs>
+          <linearGradient id="logoGrad" x1="5" y1="5" x2="43" y2="43" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#55E6F2"/><stop offset="1" stop-color="#9A8CFF"/>
+          </linearGradient>
+        </defs>
+        <path d="M24 3.5 42 14v20L24 44.5 6 34V14L24 3.5Z" stroke="url(#logoGrad)" stroke-width="1.6"/>
+        <path d="M14 31V17l20 14V17" stroke="url(#logoGrad)" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="24" cy="24" r="3.2" fill="#55E6F2"/>
+      </svg>
+      <div>
+        <div class="text-xl font-extrabold tracking-[.2em] leading-none">NUVORA</div>
+        <div class="mono text-[9px] text-cyanx tracking-[.22em] mt-1.5">CLOUD READINESS ADVISOR</div>
+      </div>
+    </a>
+    <div class="hidden sm:flex items-center gap-2 text-[10px] mono text-slate-400 border border-slate-700/70 rounded-full px-3 py-2">
+      <span class="w-1.5 h-1.5 bg-cyanx rounded-full shadow-[0_0_10px_#55e6f2]"></span>
+      DIAGNÓSTICO LOCAL · V 1.0
+    </div>
+  </header>
+
+  <main class="relative z-10 max-w-7xl mx-auto px-5 sm:px-8 pb-16">
+    <section class="pt-10 sm:pt-16 pb-12">
+      <div class="max-w-3xl">
+        <div class="eyebrow flex items-center gap-2 mb-5"><span class="w-7 h-px bg-cyanx"></span> Inteligência para decisões de infraestrutura</div>
+        <h1 class="text-4xl sm:text-6xl font-extrabold leading-[1.08] tracking-tight">
+          Sua infraestrutura,<br><span class="gradient-text">pronta para o próximo nível.</span>
+        </h1>
+        <p class="mt-6 text-slate-300 text-base sm:text-lg leading-relaxed max-w-2xl">
+          Avalie o ambiente tecnológico da sua empresa, identifique riscos operacionais e receba um roteiro técnico de evolução para a nuvem — com prioridades claras e recomendações acionáveis.
+        </p>
+        <div id="hero-actions" class="flex flex-wrap gap-3 mt-8">
+          <a href="#assessment" class="btn-primary rounded-xl px-5 py-3 text-sm transition">Iniciar diagnóstico <span aria-hidden="true">↗</span></a>
+          <button id="demoTop" class="btn-secondary rounded-xl px-5 py-3 text-sm transition">Carregar caso exemplo (Demo)</button>
+        </div>
+      </div>
+      <div class="mt-12 grid grid-cols-2 md:grid-cols-4 gap-3 max-w-4xl">
+        <div class="glass rounded-xl p-4"><div class="eyebrow">Pilares analisados</div><div class="text-2xl font-extrabold mt-2">04</div></div>
+        <div class="glass rounded-xl p-4"><div class="eyebrow">Indicadores</div><div class="text-2xl font-extrabold mt-2">08</div></div>
+        <div class="glass rounded-xl p-4"><div class="eyebrow">Escala</div><div class="text-2xl font-extrabold mt-2">0–100<span class="text-sm text-cyanx">%</span></div></div>
+        <div class="glass rounded-xl p-4"><div class="eyebrow">Processamento</div><div class="text-2xl font-extrabold mt-2">Local</div></div>
+      </div>
+    </section>
+
+    <section id="assessment" class="section-anchor grid lg:grid-cols-[.92fr_1.08fr] gap-6 items-start">
+      <div class="glass rounded-2xl p-5 sm:p-7 shadow-card">
+        <div class="flex items-start justify-between gap-3 mb-6">
+          <div><div class="eyebrow">Etapa 01 / Contexto</div><h2 class="text-2xl font-bold mt-2">Perfil da empresa</h2></div>
+          <span class="mono text-xs text-cyanx border border-cyanx/30 rounded-lg px-2 py-1">01—04</span>
+        </div>
+        <div class="space-y-4">
+          <label class="block"><span class="text-sm font-semibold text-slate-200">Nome da empresa</span>
+            <input id="company" class="field mt-2" type="text" placeholder="Ex.: Aurora Tecnologia Ltda." maxlength="90"></label>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <label class="block"><span class="text-sm font-semibold text-slate-200">Setor de atuação</span>
+              <select id="sector" class="field mt-2">
+                <option value="">Selecione...</option><option>Tecnologia</option><option>Varejo</option><option>Indústria</option><option>Serviços</option><option>Saúde</option><option>Educação</option><option>Financeiro</option><option>Logística</option><option>Outro</option>
+              </select></label>
+            <label class="block"><span class="text-sm font-semibold text-slate-200">Porte da empresa</span>
+              <select id="size" class="field mt-2">
+                <option value="">Selecione...</option><option>Micro (até 9 colaboradores)</option><option>Pequena (10–49)</option><option>Média (50–249)</option><option>Grande (250+)</option>
+              </select></label>
+          </div>
+          <label class="block"><span class="text-sm font-semibold text-slate-200">Colaboradores (aproximado)</span>
+            <input id="employees" class="field mt-2" type="number" min="1" max="1000000" placeholder="Ex.: 45"></label>
+          <div class="rounded-xl border border-cyanx/20 bg-cyanx/[.05] p-4 mt-5">
+            <div class="flex gap-3">
+              <span class="text-cyanx text-lg">⌁</span>
+              <p class="text-xs text-slate-300 leading-relaxed">Responda considerando a realidade atual da operação. Não existe resposta “certa”: o objetivo é revelar riscos, oportunidades e o próximo passo mais seguro.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass rounded-2xl p-5 sm:p-7 shadow-card">
+        <div class="flex items-start justify-between gap-3 mb-6">
+          <div><div class="eyebrow">Etapa 02 / Avaliação</div><h2 class="text-2xl font-bold mt-2">Diagnóstico técnico</h2></div>
+          <span class="mono text-xs text-cyanx border border-cyanx/30 rounded-lg px-2 py-1">08 QUESTÕES</span>
+        </div>
+        <div id="questions" class="space-y-7"></div>
+        <div class="mt-8 pt-6 border-t border-slate-700/70 flex flex-col sm:flex-row gap-3">
+          <button id="runDiagnosis" class="btn-primary rounded-xl px-6 py-3.5 text-sm flex-1 transition">Executar diagnóstico <span aria-hidden="true">→</span></button>
+          <button id="demoButton" class="btn-secondary rounded-xl px-5 py-3.5 text-sm transition">Carregar caso exemplo (Demo)</button>
+        </div>
+        <p id="formMessage" class="text-xs text-rose-300 mt-3 min-h-4" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section id="results" class="section-anchor mt-16 hidden">
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-7">
+        <div><div class="eyebrow">Etapa 03 / Resultado executivo</div><h2 class="text-3xl sm:text-4xl font-extrabold mt-2">Laudo de prontidão digital</h2>
+          <p id="reportMeta" class="text-slate-400 text-sm mt-2"></p></div>
+        <button id="printButton" class="btn-primary rounded-xl px-5 py-3 text-sm no-print">Imprimir / Exportar laudo em PDF ↗</button>
+      </div>
+
+      <div class="grid lg:grid-cols-[.82fr_1.18fr] gap-5 mb-5">
+        <div class="metric-card rounded-2xl p-6 sm:p-8 flex flex-col justify-between">
+          <div><div class="eyebrow">Score geral de prontidão</div>
+            <div class="flex items-end gap-2 mt-5"><span id="overallScore" class="text-6xl sm:text-7xl font-extrabold tracking-tight gradient-text">—</span><span class="text-2xl text-cyanx mb-2">%</span></div>
+            <div class="progress-track mt-5"><div id="overallBar" class="progress-fill" style="width:0%"></div></div>
+            <div class="mt-5"><span id="classification" class="inline-flex rounded-full border border-cyanx/30 bg-cyanx/10 text-cyanx px-3 py-1.5 text-xs font-bold">Aguardando avaliação</span></div>
+          </div>
+          <p id="overallSummary" class="text-sm text-slate-300 leading-relaxed mt-8"></p>
+        </div>
+        <div class="metric-card rounded-2xl p-5 sm:p-7">
+          <div class="flex items-center justify-between mb-4"><div><div class="eyebrow">Visão comparativa</div><h3 class="text-lg font-bold mt-1">Maturidade por pilar</h3></div><span class="mono text-[10px] text-slate-500">0—100</span></div>
+          <div class="h-[280px] sm:h-[310px] relative"><canvas id="pillarChart" aria-label="Gráfico de pontuação por pilar"></canvas></div>
+        </div>
+      </div>
+
+      <div class="mb-10">
+        <div class="flex items-center justify-between mb-4"><h3 class="text-xl font-bold">Indicadores por pilar</h3><span class="eyebrow">Detalhamento</span></div>
+        <div id="pillarCards" class="grid sm:grid-cols-2 xl:grid-cols-4 gap-3"></div>
+      </div>
+
+      <div class="mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-5">
+          <div><div class="eyebrow">Etapa 04 / Direcionamento</div><h3 class="text-2xl font-extrabold mt-1">Plano de Boas Práticas do Especialista</h3></div>
+          <p class="text-xs text-slate-400">Ações priorizadas conforme o diagnóstico</p>
+        </div>
+        <div id="recommendations" class="grid lg:grid-cols-2 gap-4"></div>
+      </div>
+      <div class="glass rounded-2xl p-5 sm:p-6 mt-6">
+        <div class="eyebrow">Nota metodológica</div>
+        <p class="text-xs text-slate-400 leading-relaxed mt-2">Este diagnóstico é uma ferramenta orientativa de autoavaliação. As pontuações refletem as respostas informadas e não substituem auditoria técnica, análise de arquitetura, pentest, avaliação jurídica ou validação de requisitos regulatórios. Antes de qualquer migração, valide dependências, contratos, custos, RPO/RTO e requisitos de segurança com profissionais responsáveis.</p>
+      </div>
+      <div class="print-only text-xs mt-5">NUVORA · Cloud Readiness Advisor · Relatório gerado localmente no navegador.</div>
+    </section>
+  </main>
+
+  <footer class="relative z-10 border-t border-slate-800/80 mt-8">
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 py-7 flex flex-col md:flex-row gap-5 md:items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg border border-cyanx/30 flex items-center justify-center text-cyanx font-bold">N</div>
+        <div><div class="text-sm font-extrabold tracking-[.16em]">NUVORA</div><div class="text-[10px] text-slate-500">Cloud Readiness Advisor</div></div>
+      </div>
+      <div class="text-xs text-slate-400 leading-relaxed max-w-xl">
+        <span class="text-cyanx font-semibold">Privacy by Design (LGPD):</span> Todos os cálculos são processados localmente no seu navegador. Nenhuma resposta é enviada a servidores por este aplicativo.
+      </div>
+      <div class="footer-actions text-[10px] mono text-slate-500">CONCEPÇÃO · EQUIPE DE TRANSFORMAÇÃO DIGITAL</div>
+    </div>
+  </footer>
+
+  <script>
+    "use strict";
+
+    const pillars = [
+      {
+        id: "cloud", name: "Infraestrutura & Nuvem", short: "Infraestrutura", icon: "◈",
+        description: "Servidores, conectividade, continuidade e estratégia de migração.",
+        questions: [
+          { title: "Como a infraestrutura principal da empresa está hospedada atualmente?", options: [
+            ["Não há inventário confiável; recursos são improvisados ou desconhecidos.", 0],
+            ["Predominantemente em servidores locais, sem plano formal de evolução.", 1],
+            ["Ambiente híbrido ou hospedagem terceirizada, com documentação parcial.", 3],
+            ["Arquitetura documentada, monitorada e com serviços em nuvem bem definidos.", 5]
+          ]},
+          { title: "Como são tratados backup, disponibilidade e recuperação de desastres?", options: [
+            ["Não existe rotina confiável de backup ou teste de restauração.", 0],
+            ["Há cópias ocasionais, mas sem política, isolamento ou testes regulares.", 1],
+            ["Backups automatizados e monitoramento, com testes ou redundância parciais.", 3],
+            ["Estratégia 3-2-1, cópia isolada, testes de restauração e RPO/RTO definidos.", 5]
+          ]}
+        ],
+        recommendations: score => score < 40 ? [
+          "Faça um inventário de servidores, sistemas operacionais, aplicações, rede, volumes de dados, dependências e responsáveis. Classifique criticidade e fim de suporte.",
+          "Implemente backup seguindo a regra 3-2-1 (três cópias, duas mídias, uma off-site/imutável), criptografia e testes documentados de restauração.",
+          "Defina RPO e RTO por sistema. Só então compare IaaS, PaaS e SaaS: priorize SaaS para ferramentas padronizadas, PaaS para aplicações gerenciadas e IaaS quando houver dependências legadas."
+        ] : score < 70 ? [
+          "Documente a arquitetura atual e faça assessment de dependências, latência, licenças, capacidade e custos. Agrupe workloads por criticidade e facilidade de migração.",
+          "Evolua o backup para 3-2-1 com cópia imutável/off-site e simulações periódicas de recuperação. Formalize RPO/RTO e plano de continuidade.",
+          "Execute uma prova de conceito de baixo risco. Compare custo total (TCO), escalabilidade e operação entre IaaS, PaaS e SaaS; migre por ondas com plano de rollback."
+        ] : [
+          "Aprimore FinOps com tags obrigatórias, orçamentos, alertas de consumo, rightsizing e revisão mensal de custos por serviço e unidade de negócio.",
+          "Teste recuperação de desastre em calendário definido, monitore SLOs e estabeleça arquitetura resiliente conforme criticidade (zonas, redundância e automação).",
+          "Mantenha landing zone padronizada, infraestrutura como código, gestão de configuração e pipeline de mudanças com revisão e rollback."
+        ]
+      },
+      {
+        id: "systems", name: "Sistemas & Dados", short: "Sistemas e dados", icon: "⌘",
+        description: "Integração de ERP/CRM, consistência e fluxo de informações.",
+        questions: [
+          { title: "Como os sistemas ERP, CRM e demais aplicações compartilham informações?", options: [
+            ["Não há integração; os dados são redigitados manualmente.", 0],
+            ["Trocas por planilhas, e-mails ou importações manuais frequentes.", 1],
+            ["Algumas integrações via API/conectores, mas com lacunas e retrabalho.", 3],
+            ["Fluxos integrados, monitorados e com regras claras de qualidade de dados.", 5]
+          ]},
+          { title: "Como a empresa controla planilhas paralelas e a qualidade dos dados?", options: [
+            ["Cada área mantém suas próprias versões, sem padrão ou responsável.", 0],
+            ["Existem planilhas compartilhadas, mas há duplicidade e divergências.", 1],
+            ["Há padrões e responsáveis em parte dos processos, com conciliação periódica.", 3],
+            ["Dados mestres, responsáveis, catálogo e indicadores têm governança definida.", 5]
+          ]}
+        ],
+        recommendations: score => score < 40 ? [
+          "Mapeie os processos críticos e identifique onde dados são digitados novamente. Defina uma fonte oficial para clientes, produtos, pedidos e financeiro.",
+          "Priorize integração ERP/CRM por APIs oficiais ou middleware/iPaaS. Evite integrações frágeis por planilhas e contas pessoais.",
+          "Crie padrões de cadastro, responsáveis pelos dados e validações para reduzir duplicidade, inconsistência e retrabalho."
+        ] : score < 70 ? [
+          "Construa um mapa de integrações com sistemas de origem/destino, frequência, responsável, criticidade e tratamento de falhas.",
+          "Padronize APIs, autenticação, logs e filas para processos assíncronos. Implemente alertas de falha e reconciliação automática.",
+          "Reduza planilhas paralelas com painéis conectados às fontes oficiais e regras de qualidade (completude, unicidade e atualização)."
+        ] : [
+          "Evolua para arquitetura orientada a eventos quando fizer sentido, com contratos de API versionados e observabilidade ponta a ponta.",
+          "Implemente catálogo, linhagem, classificação e métricas de qualidade dos dados. Defina SLAs entre áreas produtoras e consumidoras.",
+          "Avalie uma camada analítica governada (data warehouse/lakehouse) com controle de acesso e indicadores corporativos certificados."
+        ]
+      },
+      {
+        id: "ai", name: "IA & Automação", short: "IA e automação", icon: "✳",
+        description: "Automação de tarefas, IA generativa e produtividade.",
+        questions: [
+          { title: "Qual é o nível atual de automação dos processos repetitivos?", options: [
+            ["A maioria das tarefas é manual e depende de controles individuais.", 0],
+            ["Há macros ou automações pontuais, sem padronização ou monitoramento.", 1],
+            ["Workflows No-Code/RPA automatizam processos de algumas áreas.", 3],
+            ["Processos priorizados são automatizados, medidos e continuamente melhorados.", 5]
+          ]},
+          { title: "Como a empresa utiliza IA generativa no trabalho?", options: [
+            ["Não utiliza ou não há orientação sobre ferramentas de IA.", 0],
+            ["Uso individual e experimental, sem diretrizes ou avaliação de riscos.", 1],
+            ["Casos de uso aprovados e orientação básica para os colaboradores.", 3],
+            ["Casos de uso governados, com revisão humana, métricas e proteção de dados.", 5]
+          ]}
+        ],
+        recommendations: score => score < 40 ? [
+          "Levante tarefas repetitivas por volume, tempo, erro e impacto. Comece com automações simples e reversíveis, como notificações, aprovações e atualização de registros.",
+          "Crie uma política inicial de IA: não inserir dados pessoais, confidenciais ou estratégicos em ferramentas não aprovadas; exigir revisão humana dos resultados.",
+          "Teste um piloto No-Code com dados fictícios ou minimizados. Meça horas poupadas, taxa de erro e custo antes de escalar."
+        ] : score < 70 ? [
+          "Priorize automações por ROI e risco. Integre formulários, CRM, ERP e ferramentas de comunicação usando conectores oficiais e contas de serviço.",
+          "Estabeleça catálogo de automações, responsáveis, logs, tratamento de exceções e plano manual de contingência.",
+          "Para IA generativa, defina casos permitidos, fontes confiáveis, revisão humana, controle de acesso e avaliação de precisão e vieses."
+        ] : [
+          "Implemente ciclo de vida de automações: homologação, versionamento, monitoramento, gestão de credenciais e revisão periódica de permissões.",
+          "Avalie RAG com base documental autorizada para reduzir respostas sem fonte. Registre avaliações de qualidade, incidentes e intervenção humana.",
+          "Acompanhe ROI por processo: horas líquidas economizadas, custo de operação, retrabalho e satisfação. Reinvista ganhos em melhoria contínua."
+        ]
+      },
+      {
+        id: "security", name: "Segurança & Governança", short: "Segurança", icon: "⬡",
+        description: "LGPD, identidade, proteção de dados e uso responsável.",
+        questions: [
+          { title: "Como são protegidos acessos e contas corporativas?", options: [
+            ["Senhas compartilhadas ou ausência de controle centralizado de acesso.", 0],
+            ["Senhas individuais, mas MFA e revisão de permissões não são consistentes.", 1],
+            ["MFA nos sistemas críticos, perfis por função e desligamento de acessos.", 3],
+            ["MFA abrangente, menor privilégio, SSO e revisão periódica/auditável.", 5]
+          ]},
+          { title: "Como a empresa atende à LGPD e responde a incidentes?", options: [
+            ["Não há inventário de dados pessoais nem processo definido.", 0],
+            ["Há ações pontuais, mas políticas, bases legais e resposta são incompletas.", 1],
+            ["Dados e responsáveis mapeados parcialmente, políticas e canal definidos.", 3],
+            ["Governança contínua, registros, retenção, direitos dos titulares e plano de incidentes testado.", 5]
+          ]}
+        ],
+        recommendations: score => score < 40 ? [
+          "Ative MFA prioritariamente em e-mail, VPN, sistemas administrativos e nuvem. Elimine contas compartilhadas e aplique menor privilégio.",
+          "Mapeie dados pessoais, finalidades, sistemas, compartilhamentos e prazos de retenção. Identifique controlador, operadores e responsáveis internos.",
+          "Formalize procedimento de incidente, cópias de segurança protegidas e canal para solicitações de titulares. Envolva jurídico/encarregado quando aplicável."
+        ] : score < 70 ? [
+          "Centralize identidade quando viável (SSO), padronize provisionamento/desligamento e faça revisão trimestral de acessos privilegiados.",
+          "Complete o inventário de operações de tratamento, avalie bases legais e contratos com operadores e mantenha registros atualizados.",
+          "Treine equipes contra phishing e uso inseguro de IA. Faça exercícios de resposta a incidentes e registre ações corretivas."
+        ] : [
+          "Adote gestão contínua de riscos, varredura de vulnerabilidades, correção por criticidade e testes de restauração e resposta a incidentes.",
+          "Audite fornecedores e operadores, revise contratos e mantenha evidências de controles, retenção, descarte e atendimento aos direitos dos titulares.",
+          "Estabeleça comitê de governança de IA e segurança para avaliar novos usos, riscos, transparência, supervisão humana e proteção de dados."
+        ]
+      }
+    ];
+
+    const questionRoot = document.getElementById("questions");
+    let chartInstance = null;
+    let latestReport = null;
+
+    function renderQuestions() {
+      questionRoot.innerHTML = pillars.map((pillar, pillarIndex) => `
+        <section class="space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="pillar-icon w-9 h-9 rounded-xl flex items-center justify-center text-lg">${pillar.icon}</span>
+            <div><div class="eyebrow">Pilar 0${pillarIndex + 1}</div><h3 class="font-bold text-sm">${pillar.name}</h3></div>
+          </div>
+          ${pillar.questions.map((question, questionIndex) => {
+            const id = `${pillar.id}_${questionIndex}`;
+            return `<fieldset class="space-y-2">
+              <legend class="text-sm text-slate-200 font-semibold leading-relaxed mb-3">${pillarIndex * 2 + questionIndex + 1}. ${question.title}</legend>
+              ${question.options.map(([label, score]) => `
+                <label class="question-option text-xs sm:text-[13px] text-slate-300 leading-relaxed">
+                  <input type="radio" name="${id}" value="${score}">
+                  <span class="flex-1">${label}</span>
+                  <span class="mono text-[10px] text-slate-500 whitespace-nowrap">${score}/5</span>
+                </label>`).join("")}
+            </fieldset>`;
+          }).join("")}
+        </section>
+        ${pillarIndex < pillars.length - 1 ? '<div class="border-t border-slate-700/60"></div>' : ''}
+      `).join("");
+    }
+
+    function classificationFor(score) {
+      if (score < 25) return { label: "Crítico", summary: "A operação apresenta lacunas relevantes. Priorize controles básicos, continuidade e inventário antes de iniciativas amplas de transformação." };
+      if (score < 50) return { label: "Em transição", summary: "Existem iniciativas em andamento, mas a maturidade ainda é irregular. Organize fundamentos e execute melhorias por etapas." };
+      if (score < 75) return { label: "Estruturado", summary: "A empresa possui práticas estabelecidas. O foco agora é integrar, medir resultados e elevar resiliência e governança." };
+      return { label: "Líder digital", summary: "A base demonstra maturidade elevada. Mantenha melhoria contínua, gestão de custos, governança e testes regulares de resiliência." };
+    }
+
+    function calculate() {
+      const company = document.getElementById("company").value.trim();
+      const sector = document.getElementById("sector").value;
+      const size = document.getElementById("size").value;
+      const employees = document.getElementById("employees").value.trim();
+      const message = document.getElementById("formMessage");
+
+      if (!company || !sector || !size || !employees || Number(employees) < 1) {
+        message.textContent = "Preencha nome, setor, porte e quantidade aproximada de colaboradores.";
+        document.getElementById(!company ? "company" : !sector ? "sector" : !size ? "size" : "employees").focus();
+        return;
+      }
+      const scores = [];
+      for (const pillar of pillars) {
+        const answers = pillar.questions.map((_, i) => document.querySelector(`input[name="${pillar.id}_${i}"]:checked`));
+        if (answers.some(answer => !answer)) {
+          message.textContent = "Responda às 8 questões para gerar um diagnóstico consistente.";
+          const firstMissing = pillar.questions.findIndex((_, i) => !document.querySelector(`input[name="${pillar.id}_${i}"]:checked`));
+          document.querySelector(`input[name="${pillar.id}_${firstMissing}"]`).closest("label").scrollIntoView({ behavior:"smooth", block:"center" });
+          return;
+        }
+        const total = answers.reduce((sum, answer) => sum + Number(answer.value), 0);
+        scores.push(Math.round((total / 10) * 100));
+      }
+
+      message.textContent = "";
+      const overall = Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+      latestReport = { company, sector, size, employees, scores, overall, generatedAt: new Date() };
+      renderReport(latestReport);
+    }
+
+    function renderReport(report) {
+      const classification = classificationFor(report.overall);
+      document.getElementById("reportMeta").textContent =
+        `${report.company} · ${report.sector} · ${report.size} · ${report.employees} colaboradores · ${report.generatedAt.toLocaleString("pt-BR")}`;
+      document.getElementById("overallScore").textContent = report.overall;
+      document.getElementById("overallBar").style.width = `${report.overall}%`;
+      document.getElementById("classification").textContent = classification.label;
+      document.getElementById("overallSummary").textContent = classification.summary;
+
+      document.getElementById("pillarCards").innerHTML = pillars.map((pillar, index) => `
+        <article class="metric-card rounded-xl p-4">
+          <div class="flex items-center justify-between gap-2"><span class="pillar-icon w-9 h-9 rounded-lg flex items-center justify-center">${pillar.icon}</span><span class="mono text-xs text-slate-500">0${index + 1}</span></div>
+          <h4 class="font-bold text-sm mt-4">${pillar.short}</h4>
+          <div class="flex items-baseline gap-1 mt-2"><span class="text-3xl font-extrabold">${report.scores[index]}</span><span class="text-xs text-cyanx">/ 100</span></div>
+          <div class="progress-track mt-3"><div class="progress-fill" style="width:${report.scores[index]}%"></div></div>
+          <p class="text-[11px] text-slate-400 mt-3">${report.scores[index] < 40 ? "Prioridade alta" : report.scores[index] < 70 ? "Evolução recomendada" : "Prática consistente"}</p>
+        </article>`).join("");
+
+      document.getElementById("recommendations").innerHTML = pillars.map((pillar, index) => {
+        const score = report.scores[index];
+        const priority = score < 40 ? "ALTA PRIORIDADE" : score < 70 ? "EVOLUÇÃO" : "OTIMIZAÇÃO";
+        return `<article class="glass rounded-2xl p-5 sm:p-6">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-center gap-3"><span class="pillar-icon w-10 h-10 rounded-xl flex items-center justify-center text-lg">${pillar.icon}</span><div><div class="eyebrow">Pilar 0${index + 1}</div><h4 class="font-bold">${pillar.name}</h4></div></div>
+            <span class="mono text-[9px] rounded-full border border-slate-600 px-2 py-1 text-slate-400 whitespace-nowrap">${priority}</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-3">${pillar.description} · Score ${score}/100</p>
+          <div class="space-y-3 mt-5">${pillar.recommendations(score).map((item, i) => `
+            <div class="recommendation rounded-r-lg p-3 flex gap-3">
+              <span class="mono text-xs text-cyanx mt-0.5">0${i + 1}</span>
+              <p class="text-xs text-slate-200 leading-relaxed">${item}</p>
+            </div>`).join("")}</div>
+        </article>`;
+      }).join("");
+
+      drawChart(report.scores);
+      const results = document.getElementById("results");
+      results.classList.remove("hidden");
+      results.scrollIntoView({ behavior:"smooth", block:"start" });
+    }
+
+    function drawChart(scores) {
+      const canvas = document.getElementById("pillarChart");
+      if (chartInstance) chartInstance.destroy();
+      if (typeof Chart === "undefined") {
+        canvas.parentElement.innerHTML = '<p class="text-sm text-rose-300 p-5">Não foi possível carregar o Chart.js. Verifique sua conexão e recarregue a página.</p>';
+        return;
+      }
+      chartInstance = new Chart(canvas, {
+        type: "radar",
+        data: {
+          labels: ["Infraestrutura & Nuvem", "Sistemas & Dados", "IA & Automação", "Segurança & Governança"],
+          datasets: [{
+            label: "Maturidade",
+            data: scores,
+            backgroundColor: "rgba(85,230,242,.16)",
+            borderColor: "#55e6f2",
+            pointBackgroundColor: "#a99cff",
+            pointBorderColor: "#eafcff",
+            pointRadius: 4,
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display:false }, tooltip: { callbacks: { label: context => ` ${context.formattedValue}/100` } } },
+          scales: { r: {
+            min:0, max:100, ticks: { stepSize:20, color:"#91a5bd", backdropColor:"transparent", font:{ size:9 } },
+            pointLabels: { color:"#c4d5e5", font:{ family:"Manrope", size:10, weight:"600" } },
+            grid: { color:"rgba(145,165,189,.17)" }, angleLines: { color:"rgba(145,165,189,.17)" }
+          } }
+        }
+      });
+    }
+
+    function loadDemo() {
+      document.getElementById("company").value = "Aurora Distribuição Inteligente";
+      document.getElementById("sector").value = "Varejo";
+      document.getElementById("size").value = "Média (50–249)";
+      document.getElementById("employees").value = "120";
+      const demoAnswers = {
+        cloud: [3, 1],
+        systems: [3, 1],
+        ai: [1, 3],
+        security: [3, 1]
+      };
+      for (const [pillarId, values] of Object.entries(demoAnswers)) {
+        values.forEach((score, index) => {
+          const radio = document.querySelector(`input[name="${pillarId}_${index}"][value="${score}"]`);
+          if (radio) radio.checked = true;
+        });
+      }
+      document.getElementById("formMessage").textContent = "Caso fictício carregado. Gerando diagnóstico demonstrativo...";
+      calculate();
+    }
+
+    document.getElementById("runDiagnosis").addEventListener("click", calculate);
+    document.getElementById("demoButton").addEventListener("click", loadDemo);
+    document.getElementById("demoTop").addEventListener("click", loadDemo);
+    document.getElementById("printButton").addEventListener("click", () => window.print());
+
+    renderQuestions();
+  </script>
+</body>
+</html>
